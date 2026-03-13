@@ -1,0 +1,86 @@
+import formidable from 'formidable';
+import fs from 'fs';
+import path from 'path';
+import crypto from 'crypto';
+import jwt from 'jsonwebtoken';
+import { readDB, writeDB } from '../../lib/db';
+import { parseQuoteXlsx } from '../../lib/xlsx';
+import { generateCustomerPdf } from '../../lib/pdf';
+import { getContract } from '../../lib/blockchain';
+
+export const config = { api: { bodyParser: false } };
+
+export default async function handler(req, res){
+  if(req.method !== 'POST') return res.status(405).json({ error:'Method not allowed' });
+
+  const form = formidable({ multiples:false });
+  const { fields, files } = await new Promise((resolve, reject)=>{
+    form.parse(req, (err, fields, files)=>{ if(err) reject(err); else resolve({fields, files}); });
+  });
+
+  const customer = { name: String(fields.customerName||'').trim(), email: String(fields.customerEmail||'').trim() };
+  if(!customer.name || !customer.email) return res.status(400).json({ error:'Missing customer name/email' });
+  if(!files.file) return res.status(400).json({ error:'Missing .xlsx file' });
+
+  const buf = fs.readFileSync(files.file.filepath);
+  const rows = parseQuoteXlsx(buf);
+  if(!rows.length) return res.status(400).json({ error:'No rows parsed from sheet' });
+
+  // Build items for PDF (redacted)
+  const items = rows.filter(r=>r['Quotation']).map(r=>({
+    part: r['Parts number']||'',
+    desc: r['Description']||'',
+    qtyTier: r["Q'ty"]||'',
+    price: typeof r['Quotation']==='string' ? r['Quotation'] : Number(r['Quotation']).toFixed(2)
+  }));
+
+  // Create Quote ID (auto)
+  const seq = String(Date.now()).slice(-6); // simple seq for demo
+  const year = new Date().getFullYear();
+  const quoteId = `Q-${year}-${seq}`;
+  const version = 1;
+
+  const quoteDir = path.join(process.cwd(),'storage','quotes',quoteId);
+  const internalDir = path.join(process.cwd(),'storage','internal',quoteId);
+  fs.mkdirSync(quoteDir, { recursive: true });
+  fs.mkdirSync(internalDir, { recursive: true });
+
+  // Generate customer PDF
+  const pdfPath = path.join(quoteDir, `v${version}.pdf`);
+  const terms = String(fields.notes||'');
+  const footer = { validity:'30 Days', paymentTerms:'Net 30', deliveryTerms:'FOB', warrantyLeadTime:'Standard' };
+  generateCustomerPdf({ quoteId, customer, items, terms, footer, outPath: pdfPath });
+
+  // Internal JSON (unredacted): save raw rows
+  const internal = { quoteId, version, customer, currency:'USD', rows };
+  const jsonPath = path.join(internalDir, `v${version}.json`);
+  fs.writeFileSync(jsonPath, JSON.stringify(internal));
+
+  // Hashes
+  const pdfHash = '0x'+crypto.createHash('sha256').update(fs.readFileSync(pdfPath)).digest('hex');
+  const metaHash = '0x'+crypto.createHash('sha256').update(fs.readFileSync(jsonPath)).digest('hex');
+
+  // Blockchain event: QuoteCreated
+  let txHash = null;
+  try{
+    const c = getContract();
+    const tx = await c.logQuoteCreated(quoteId, version, pdfHash, metaHash);
+    const rc = await tx.wait();
+    txHash = rc.hash;
+  }catch(e){
+    console.error('Blockchain error:', e.message);
+  }
+
+  // Secure link token
+  const ttl = Number(process.env.TOKEN_TTL_HOURS||'168');
+  const token = jwt.sign({ quoteId, version, email: customer.email }, process.env.LINK_TOKEN_SECRET||'dev', { expiresIn: `${ttl}h` });
+  const secureLink = `${req.headers['x-forwarded-proto']||'http'}://${req.headers.host}/view?token=${token}`;
+
+  // Save to DB
+  const db = readDB();
+  db.quotes.push({ quoteId, version, customer, createdAt: Date.now(), pdfHash, metaHash, txHash, secureLink });
+  writeDB(db);
+
+  // In production, send email via provider (SendGrid/SES). For demo, return link.
+  return res.status(200).json({ ok:true, quoteId, version, pdfHash, metaHash, txHash, secureLink });
+}
