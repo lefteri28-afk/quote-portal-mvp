@@ -3,15 +3,16 @@ import fs from 'fs';
 import path from 'path';
 import crypto from 'crypto';
 import jwt from 'jsonwebtoken';
-import { parseQuoteXlsx } from '../../../lib/xlsx';
-import { generateCustomerPdf } from '../../../lib/pdf';
-import { getContract } from '../../../lib/blockchain';
+import { parseQuoteXlsx } from '../../../lib/xlsx.js';
+import { generateCustomerPdf } from '../../../lib/pdf.js';
+import { getContract } from '../../../lib/blockchain.js';
 
 export const config = { api: { bodyParser: false } };
 
 export default async function handler(req, res) {
-  if (req.method !== 'POST')
+  if (req.method !== 'POST') {
     return res.status(405).json({ error: 'Method not allowed' });
+  }
 
   const form = formidable({ multiples: false });
 
@@ -27,26 +28,28 @@ export default async function handler(req, res) {
     email: String(fields.customerEmail || '').trim(),
   };
 
-  if (!customer.name || !customer.email)
+  if (!customer.name || !customer.email) {
     return res.status(400).json({ error: 'Missing customer name/email' });
+  }
 
-  if (!files.file)
+  if (!files.file) {
     return res.status(400).json({ error: 'Missing .xlsx file' });
+  }
 
   const buf = fs.readFileSync(files.file.filepath);
   const rows = parseQuoteXlsx(buf);
 
-  if (!rows.length)
+  if (!rows.length) {
     return res.status(400).json({ error: 'No rows parsed from sheet' });
+  }
 
   const items = rows.filter(r => r['Quotation']).map(r => ({
     part: r['Parts number'] || '',
     desc: r['Description'] || '',
     qtyTier: r["Q'ty"] || '',
-    price:
-      typeof r['Quotation'] === 'string'
-        ? r['Quotation']
-        : Number(r['Quotation']).toFixed(2),
+    price: typeof r['Quotation'] === 'string'
+      ? r['Quotation']
+      : Number(r['Quotation']).toFixed(2),
   }));
 
   const seq = String(Date.now()).slice(-6);
@@ -54,13 +57,14 @@ export default async function handler(req, res) {
   const quoteId = `Q-${year}-${seq}`;
   const version = 1;
 
-  // ===== VERCEL-SAFE TEMP STORAGE =====
+  // --- VERCEL-SAFE TEMP STORAGE ---
   const quoteDir = path.join('/tmp', 'quotes', quoteId);
   const internalDir = path.join('/tmp', 'internal', quoteId);
   fs.mkdirSync(quoteDir, { recursive: true });
   fs.mkdirSync(internalDir, { recursive: true });
 
   const pdfPath = path.join(quoteDir, `v${version}.pdf`);
+
   const terms = String(fields.notes || '');
   const footer = {
     validity: '30 Days',
@@ -89,14 +93,17 @@ export default async function handler(req, res) {
   const jsonPath = path.join(internalDir, `v${version}.json`);
   fs.writeFileSync(jsonPath, JSON.stringify(internal));
 
-  const pdfHash =
-    '0x' +
-    crypto.createHash('sha256').update(fs.readFileSync(pdfPath)).digest('hex');
-  const metaHash =
-    '0x' +
-    crypto.createHash('sha256').update(fs.readFileSync(jsonPath)).digest('hex');
+  const pdfHash = '0x' + crypto
+    .createHash('sha256')
+    .update(fs.readFileSync(pdfPath))
+    .digest('hex');
 
-  // Blockchain event
+  const metaHash = '0x' + crypto
+    .createHash('sha256')
+    .update(fs.readFileSync(jsonPath))
+    .digest('hex');
+
+  // Blockchain (safe even if it errors)
   let txHash = null;
   try {
     const c = getContract();
@@ -107,6 +114,7 @@ export default async function handler(req, res) {
     console.error('Blockchain error:', e.message);
   }
 
+  // Secure link
   const ttl = Number(process.env.TOKEN_TTL_HOURS || '168');
   const token = jwt.sign(
     { quoteId, version, email: customer.email },
@@ -114,7 +122,8 @@ export default async function handler(req, res) {
     { expiresIn: `${ttl}h` }
   );
 
-  const secureLink = `${req.headers['x-forwarded-proto'] || 'https'}://${req.headers.host}/view?token=${token}`;
+  const secureLink =
+    `${req.headers['x-forwarded-proto'] || 'https'}://${req.headers.host}/view?token=${token}`;
 
   return res.status(200).json({
     ok: true,
@@ -125,6 +134,4 @@ export default async function handler(req, res) {
     txHash,
     secureLink,
   });
-}aHash, txHash, secureLink }); writeDB(db);
-  return res.status(200).json({ ok:true, quoteId, version, pdfHash, metaHash, txHash, secureLink });
 }
