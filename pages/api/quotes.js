@@ -3,9 +3,6 @@ import { generateCustomerPdf } from '../../lib/pdf.js';
 import { getContract } from '../../lib/blockchain.js';
 import crypto from 'crypto';
 import jwt from 'jsonwebtoken';
-import { parseQuoteXlsx } from '../../../lib/xlsx.js';
-import { generateCustomerPdf } from '../../../lib/pdf.js';
-import { getContract } from '../../../lib/blockchain.js';
 ``
 
 export const config = { api: { bodyParser: false } };
