@@ -6,7 +6,6 @@ import { generateCustomerPdf } from '../../lib/pdf.js';
 import { getContract } from '../../lib/blockchain.js';
 import crypto from 'crypto';
 import jwt from 'jsonwebtoken';
-``
 
 export const config = { api: { bodyParser: false } };
 
