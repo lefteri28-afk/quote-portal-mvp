@@ -120,7 +120,8 @@ export default async function handler(req, res) {
     { expiresIn: `${ttl}h` }
   );
 
-  const secureLink = `${req.headers['x-forwarded-proto'] || 'https'}://${req.headers.host}/view?token=${token}`;
+  const secureLink =
+    `${req.headers['x-forwarded-proto'] || 'https'}://${req.headers.host}/view?token=${token}`;
 
   return res.status(200).json({
     ok: true,
