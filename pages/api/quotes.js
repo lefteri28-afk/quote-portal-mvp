@@ -92,8 +92,8 @@ const buf = fs.readFileSync(tempPath);
       deliveryTerms: 'FOB',
       warrantyLeadTime: 'Standard',
     };
-    - generateCustomerPdf({
-+ await generateCustomerPdf({
+
+await generateCustomerPdf({
     quoteId,
     customer,
     items,
