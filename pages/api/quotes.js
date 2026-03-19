@@ -43,7 +43,14 @@ export default async function handler(req, res) {
     }
 
     // read & parse xlsx
-    const buf = fs.readFileSync(files.file.filepath);
+    // Robustly grab the uploaded file (array or single), and support both `filepath` (v3) and `path` (older)
+const raw = files?.file ?? files?.['file'];
+const fileObj = Array.isArray(raw) ? raw[0] : raw;
+const tempPath = fileObj?.filepath || fileObj?.path;
+if (!tempPath) {
+  return res.status(400).json({ ok: false, error: 'Upload missing temporary filepath' });
+}
+const buf = fs.readFileSync(tempPath);
     const rows = parseQuoteXlsx(buf);
     if (!rows.length) {
       return res.status(400).json({ error: 'No rows parsed from sheet' });
