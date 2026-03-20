@@ -101,7 +101,6 @@ await generateCustomerPdf({
   footer,
   outPath: pdfPath,
 });
-``
 
       quoteId,
       customer,
