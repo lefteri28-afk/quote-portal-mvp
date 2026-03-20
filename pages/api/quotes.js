@@ -94,13 +94,14 @@ const buf = fs.readFileSync(tempPath);
     };
 
 await generateCustomerPdf({
-    quoteId,
-    customer,
-    items,
-    terms,
-    footer,
-    outPath: pdfPath,
-  });
+  quoteId,
+  customer,
+  items,
+  terms,
+  footer,
+  outPath: pdfPath,
+});
+``
 
       quoteId,
       customer,
