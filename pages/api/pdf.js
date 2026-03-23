@@ -14,18 +14,18 @@ export default async function handler(req, res) {
 
   const pdfPath = path.join('/tmp', 'quotes', quoteId, `v${version}.pdf`);
 
-  // If PDF already exists in this invocation's /tmp, stream it
+  // If the PDF already exists for this invocation, stream it
   if (fs.existsSync(pdfPath)) {
     res.setHeader('Content-Type', 'application/pdf');
     return fs.createReadStream(pdfPath).pipe(res);
   }
 
-  // If not present, try to rebuild from a signed token embedded in the secure link
+  // Rebuild from token if available
   if (token) {
     try {
       const payload = jwt.verify(token, process.env.LINK_TOKEN_SECRET || 'dev');
 
-      // Basic consistency check
+      // Sanity check: token must match URL
       if (payload.quoteId !== quoteId || Number(payload.version) !== version) {
         return res.status(400).end('Token/URL mismatch');
       }
