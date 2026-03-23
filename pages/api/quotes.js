@@ -86,12 +86,12 @@ const buf = fs.readFileSync(tempPath);
 
     // pdf generation
     const terms = String(fields.notes || '');
-    const footer = {
-      validity: '30 Days',
-      paymentTerms: 'Net 30',
-      deliveryTerms: 'FOB',
-      warrantyLeadTime: 'Standard',
-    };
+const footer = {
+  validity: '30 Days',
+  paymentTerms: 'Net 30',
+  deliveryTerms: 'FOB',
+  warrantyLeadTime: 'Standard',
+};
 
 await generateCustomerPdf({
   quoteId,
@@ -102,16 +102,8 @@ await generateCustomerPdf({
   outPath: pdfPath,
 });
 
-      quoteId,
-      customer,
-      items,
-      terms,
-      footer,
-      outPath: pdfPath,
-    });
-
-    // internal json
-    const internal = { quoteId, version, customer, currency: 'USD', rows };
+// internal json
+const internal = { quoteId, version, customer, currency: 'USD', rows };
     fs.writeFileSync(jsonPath, JSON.stringify(internal));
 
     // hashes
