@@ -1,33 +1,38 @@
+// pages/api/pdf.js
 import fs from 'fs';
 import path from 'path';
 import jwt from 'jsonwebtoken';
-import { generateCustomerPdf } from '../../lib/pdf_clean.js'; // use the clean module
+import { generateCustomerPdf } from '../../lib/pdf_clean.js';
 
 export default async function handler(req, res) {
   const { quoteId, v, token } = req.query;
   const version = Number(v || 1);
 
+  if (!quoteId) {
+    return res.status(400).end('Missing quoteId');
+  }
+
   const pdfPath = path.join('/tmp', 'quotes', quoteId, `v${version}.pdf`);
 
-  // If the PDF already exists in this invocation's /tmp, stream it
+  // If PDF already exists in this invocation's /tmp, stream it
   if (fs.existsSync(pdfPath)) {
     res.setHeader('Content-Type', 'application/pdf');
     return fs.createReadStream(pdfPath).pipe(res);
   }
 
-  // If not, try to rebuild from a signed token
+  // If not present, try to rebuild from a signed token embedded in the secure link
   if (token) {
     try {
       const payload = jwt.verify(token, process.env.LINK_TOKEN_SECRET || 'dev');
 
-      // Basic validation: token quote/version must match the query
+      // Basic consistency check
       if (payload.quoteId !== quoteId || Number(payload.version) !== version) {
         return res.status(400).end('Token/URL mismatch');
       }
 
-      // Rebuild the PDF into /tmp and stream
-      const quoteDir = path.join('/tmp', 'quotes', quoteId);
-      fs.mkdirSync(quoteDir, { recursive: true });
+      // Rebuild into /tmp and stream
+      const dir = path.join('/tmp', 'quotes', quoteId);
+      fs.mkdirSync(dir, { recursive: true });
 
       await generateCustomerPdf({
         quoteId: payload.quoteId,
@@ -46,9 +51,6 @@ export default async function handler(req, res) {
     }
   }
 
-  // No file and no rebuild token → 404
+  // No file and no token to rebuild
   return res.status(404).end('PDF not found');
-}
-  res.setHeader('Content-Type', 'application/pdf');
-  fs.createReadStream(pdfPath).pipe(res);
 }
