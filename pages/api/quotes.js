@@ -58,16 +58,20 @@ const buf = fs.readFileSync(tempPath);
 
     // map visible items
     const items = rows
-      .filter(r => r['Quotation'])
-      .map(r => ({
-        part: r['Parts number'] || '',
-        desc: r['Description'] || '',
-        qtyTier: r["Q'ty"] || '',
-        price:
-          typeof r['Quotation'] === 'string'
-            ? r['Quotation']
-            : Number(r['Quotation']).toFixed(2),
-      }));
+  .filter(r => r['Quotation'])
+  .map(r => ({
+    part:   r['Parts number'] || '',
+    desc:   r['Description'] || '',
+    qtyTier: r["Q'ty"] || '',
+    price:
+      typeof r['Quotation'] === 'string'
+        ? r['Quotation']
+        : Number(r['Quotation']).toFixed(2),
+    cost:
+      r['Cost'] === undefined || r['Cost'] === ''
+        ? ''
+        : (typeof r['Cost'] === 'string' ? r['Cost'] : Number(r['Cost']).toFixed(2)),
+  }));
 
     // ids
     const seq = String(Date.now()).slice(-6);
