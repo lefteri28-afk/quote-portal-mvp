@@ -11,7 +11,10 @@ export async function getServerSideProps({ query, req }) {
     const payload = jwt.verify(token, process.env.LINK_TOKEN_SECRET || 'dev');
 
     // Compute a relative URL to /api/pdf that includes the token
-    const pdfUrl = `/api/pdf?quoteId=${encodeURIComponent(payload.quoteId)}&v=${encodeURIComponent(payload.version)}&token=${encodeURIComponent(token)}`;
+   const show = '0'; // leave "0" for customer links
+const pdfUrl = `/api/pdf?quoteId=${encodeURIComponent(payload.quoteId)}&v=${encodeURIComponent(payload.version)}&token=${encodeURIComponent(token)}&showCost=${show}`;
+
+    
 
     return {
       props: {
