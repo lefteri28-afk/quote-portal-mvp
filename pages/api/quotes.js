@@ -57,7 +57,7 @@ const buf = fs.readFileSync(tempPath);
     }
 
     // map visible items
-    const items = rows
+   const items = rows
   .filter(r => r['Quotation'])
   .map(r => ({
     part:   r['Parts number'] || '',
@@ -70,7 +70,9 @@ const buf = fs.readFileSync(tempPath);
     cost:
       r['Cost'] === undefined || r['Cost'] === ''
         ? ''
-        : (typeof r['Cost'] === 'string' ? r['Cost'] : Number(r['Cost']).toFixed(2)),
+        : (typeof r['Cost'] === 'string'
+            ? r['Cost']
+            : Number(r['Cost']).toFixed(2)),
   }));
 
     // ids
