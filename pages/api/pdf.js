@@ -44,6 +44,19 @@ export default async function handler(req, res) {
   outPath: pdfPath,
   showCost, // <- NEW
 });
+
+      const showCost =
+  req.query?.showCost === '1' || req.query?.showCost === 'true';
+
+await generateCustomerPdf({
+  quoteId: payload.quoteId,
+  customer: payload.customer,
+  items: payload.items,
+  terms: payload.terms,
+  footer: payload.footer,
+  outPath: pdfPath,
+  showCost,  // <-- this enables the Cost column if ?showCost=1
+});
       
       res.setHeader('Content-Type', 'application/pdf');
       return fs.createReadStream(pdfPath).pipe(res);
