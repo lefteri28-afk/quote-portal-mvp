@@ -126,13 +126,21 @@ const internal = { quoteId, version, customer, currency: 'USD', rows };
       console.error('Blockchain error:', e?.message || e);
     }
 
-    // token + secure link
-    const ttl = Number(process.env.TOKEN_TTL_HOURS || '168');
-    const token = jwt.sign(
-      { quoteId, version, email: customer.email },
-      process.env.LINK_TOKEN_SECRET || 'dev',
-      { expiresIn: `${ttl}h` }
-    );
+ // --- after computing items, customer, terms, footer, quoteId, version ---
+const ttl = Number(process.env.TOKEN_TTL_HOURS || '168');
+const token = jwt.sign(
+  {
+    quoteId,
+    version,
+    email: customer.email,  // optional
+    customer,               // include for rebuild
+    items,                  // include for rebuild
+    terms,                  // include for rebuild
+    footer                  // include for rebuild
+  },
+  process.env.LINK_TOKEN_SECRET || 'dev',
+  { expiresIn: `${ttl}h` }
+);
     const proto = (req.headers['x-forwarded-proto'] || 'https');
     const host = req.headers.host;
     const secureLink = `${proto}://${host}/view?token=${token}`;
