@@ -12,8 +12,7 @@ export async function getServerSideProps({ query, req }) {
 
     // Compute a relative URL to /api/pdf that includes the token
    const show = '0'; // leave "0" for customer links
-const pdfUrl = `/api/pdf?quoteId=${encodeURIComponent(payload.quoteId)}&v=${encodeURIComponent(payload.version)}&token=${encodeURIComponent(token)}&showCost=${show}`;
-
+const pdfUrl = `/api/pdf?quoteId=${encodeURIComponent(payload.quoteId)}&v=${encodeURIComponent(payload.version)}&token=${encodeURIComponent(token)}&land=1`;
     
 
     return {
