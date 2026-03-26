@@ -60,6 +60,7 @@ export default async function handler(req, res) {
       outPath: pdfPath,
       showCost,
       landscape,
+      createdDate: payload.createdDate, // pass the frozen date
     });
 
     res.setHeader('Content-Type', 'application/pdf');
