@@ -2,7 +2,8 @@ import formidable from 'formidable';
 import fs from 'fs';
 import path from 'path';
 import { parseQuoteXlsx } from '../../lib/xlsx.js';
-import { generateCustomerPdf } from '../../lib/pdf.js';
+// If you created lib/pdf_clean.js, use it; otherwise keep ../../lib/pdf.js
+import { generateCustomerPdf } from '../../lib/pdf_clean.js';
 import { getContract } from '../../lib/blockchain.js';
 import crypto from 'crypto';
 import jwt from 'jsonwebtoken';
@@ -10,8 +11,7 @@ import jwt from 'jsonwebtoken';
 export const config = { api: { bodyParser: false } };
 
 export default async function handler(req, res) {
-  // --- QUICK PING to verify the function runs (open in a browser):
-  // GET /api/quotes?ping=1  --> { ok: true, stage: 'handler-alive' }
+  // Ping: GET /api/quotes?ping=1 -> { ok: true, stage: 'handler-alive' }
   if (req.method === 'GET' && req.query?.ping === '1') {
     return res.status(200).json({ ok: true, stage: 'handler-alive' });
   }
@@ -21,7 +21,7 @@ export default async function handler(req, res) {
   }
 
   try {
-    // parse multipart/form-data
+    // Parse multipart/form-data
     const form = formidable({ multiples: false });
     const { fields, files } = await new Promise((resolve, reject) => {
       form.parse(req, (err, fields, files) => {
@@ -42,46 +42,50 @@ export default async function handler(req, res) {
       return res.status(400).json({ error: 'Missing .xlsx file' });
     }
 
-    // read & parse xlsx
-    // Robustly grab the uploaded file (array or single), and support both `filepath` (v3) and `path` (older)
-const raw = files?.file ?? files?.['file'];
-const fileObj = Array.isArray(raw) ? raw[0] : raw;
-const tempPath = fileObj?.filepath || fileObj?.path;
-if (!tempPath) {
-  return res.status(400).json({ ok: false, error: 'Upload missing temporary filepath' });
-}
-const buf = fs.readFileSync(tempPath);
+    // Robust file extraction (array or single) and support filepath|path
+    const raw = files?.file ?? files?.['file'];
+    const fileObj = Array.isArray(raw) ? raw[0] : raw;
+    const tempPath = fileObj?.filepath || fileObj?.path;
+    if (!tempPath) {
+      return res.status(400).json({ ok: false, error: 'Upload missing temporary filepath' });
+    }
+
+    // Read & parse Excel
+    const buf = fs.readFileSync(tempPath);
     const rows = parseQuoteXlsx(buf);
     if (!rows.length) {
       return res.status(400).json({ error: 'No rows parsed from sheet' });
     }
 
-    // map visible items
-   const items = rows
-  .filter(r => r['Quotation'])
-  .map(r => ({
-    part:   r['Parts number'] || '',
-    desc:   r['Description'] || '',
-    qtyTier: r["Q'ty"] || '',
-    price:
-      typeof r['Quotation'] === 'string'
-        ? r['Quotation']
-        : Number(r['Quotation']).toFixed(2),
-    cost:
-      r['Cost'] === undefined || r['Cost'] === ''
-        ? ''
-        : (typeof r['Cost'] === 'string'
-            ? r['Cost']
-            : Number(r['Cost']).toFixed(2)),
-  }));
+    // Map visible items (includes optional Cost if present in sheet)
+    const items = rows
+      .filter(r => r['Quotation'])
+      .map(r => ({
+        part:    r['Parts number'] || '',
+        desc:    r['Description'] || '',
+        qtyTier: r["Q'ty"] || '',
+        price:
+          typeof r['Quotation'] === 'string'
+            ? r['Quotation']
+            : Number(r['Quotation']).toFixed(2),
+        cost:
+          r['Cost'] === undefined || r['Cost'] === ''
+            ? ''
+            : (typeof r['Cost'] === 'string'
+                ? r['Cost']
+                : Number(r['Cost']).toFixed(2)),
+      }));
 
-    // ids
+    // IDs
     const seq = String(Date.now()).slice(-6);
     const year = new Date().getFullYear();
     const quoteId = `Q-${year}-${seq}`;
     const version = 1;
 
-    // tmp paths for serverless
+    // Freeze a deterministic creation date (YYYY-MM-DD) so rebuilt PDFs match the original hash
+    const createdDate = new Date().toISOString().slice(0, 10);
+
+    // Serverless-safe temp storage
     const quoteDir = path.join('/tmp', 'quotes', quoteId);
     const internalDir = path.join('/tmp', 'internal', quoteId);
     fs.mkdirSync(quoteDir, { recursive: true });
@@ -90,37 +94,36 @@ const buf = fs.readFileSync(tempPath);
     const pdfPath = path.join(quoteDir, `v${version}.pdf`);
     const jsonPath = path.join(internalDir, `v${version}.json`);
 
-    // pdf generation
+    // PDF generation (await until file is fully written)
     const terms = String(fields.notes || '');
-const footer = {
-  validity: '30 Days',
-  paymentTerms: 'Net 30',
-  deliveryTerms: 'FOB',
-  warrantyLeadTime: 'Standard',
-};
+    const footer = {
+      validity: '30 Days',
+      paymentTerms: 'Net 30',
+      deliveryTerms: 'FOB',
+      warrantyLeadTime: 'Standard',
+    };
 
-await generateCustomerPdf({
-  quoteId,
-  customer,
-  items,
-  terms,
-  footer,
-  outPath: pdfPath,
-});
+    await generateCustomerPdf({
+      quoteId,
+      customer,
+      items,
+      terms,
+      footer,
+      outPath: pdfPath,
+      createdDate, // << deterministic date used inside the PDF and metadata
+    });
 
-// internal json
-const internal = { quoteId, version, customer, currency: 'USD', rows };
+    // Internal JSON (keep serialization stable for metaHash determinism)
+    const internal = { quoteId, version, createdDate, customer, currency: 'USD', rows };
     fs.writeFileSync(jsonPath, JSON.stringify(internal));
 
-    // hashes
+    // Hashes (0x + sha256(file bytes))
     const pdfHash =
-      '0x' +
-      crypto.createHash('sha256').update(fs.readFileSync(pdfPath)).digest('hex');
+      '0x' + crypto.createHash('sha256').update(fs.readFileSync(pdfPath)).digest('hex');
     const metaHash =
-      '0x' +
-      crypto.createHash('sha256').update(fs.readFileSync(jsonPath)).digest('hex');
+      '0x' + crypto.createHash('sha256').update(fs.readFileSync(jsonPath)).digest('hex');
 
-    // chain event (best-effort)
+    // Best-effort chain log (do not fail request if chain fails)
     let txHash = null;
     try {
       const c = getContract();
@@ -128,25 +131,26 @@ const internal = { quoteId, version, customer, currency: 'USD', rows };
       const rc = await tx.wait();
       txHash = rc.hash;
     } catch (e) {
-      // include error but do not fail the whole request
       console.error('Blockchain error:', e?.message || e);
     }
 
- // --- after computing items, customer, terms, footer, quoteId, version ---
-const ttl = Number(process.env.TOKEN_TTL_HOURS || '168');
-const token = jwt.sign(
-  {
-    quoteId,
-    version,
-    email: customer.email,  // optional
-    customer,               // include for rebuild
-    items,                  // include for rebuild
-    terms,                  // include for rebuild
-    footer                  // include for rebuild
-  },
-  process.env.LINK_TOKEN_SECRET || 'dev',
-  { expiresIn: `${ttl}h` }
-);
+    // Signed token for the secure link — include createdDate so /api/pdf can rebuild identically
+    const ttl = Number(process.env.TOKEN_TTL_HOURS || '168');
+    const token = jwt.sign(
+      {
+        quoteId,
+        version,
+        email: customer.email, // optional
+        customer,              // used for rebuild
+        items,                 // used for rebuild
+        terms,                 // used for rebuild
+        footer,                // used for rebuild
+        createdDate,           // << deterministic date carried for rebuild
+      },
+      process.env.LINK_TOKEN_SECRET || 'dev',
+      { expiresIn: `${ttl}h` }
+    );
+
     const proto = (req.headers['x-forwarded-proto'] || 'https');
     const host = req.headers.host;
     const secureLink = `${proto}://${host}/view?token=${token}`;
@@ -161,10 +165,9 @@ const token = jwt.sign(
       secureLink,
     });
   } catch (err) {
-    // Always return JSON so UI shows something.
     const message = (err && err.message) ? err.message : String(err);
     console.error('Upload handler error:', message);
     return res.status(500).json({ ok: false, error: message });
   }
 }
-``
+
